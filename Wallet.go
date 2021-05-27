@@ -91,14 +91,6 @@ func newWallet(c echo.Context) error {
 		})
 	}
 
-	// newTime := Time{
-	// 	Year:   current_time.Year(),
-	// 	Month:  int(current_time.Month()),
-	// 	Day:    current_time.Day(),
-	// 	Hour:   current_time.Hour(),
-	// 	Minute: current_time.Minute(),
-	// }
-
 	(*newWallet).Last_updated = fmt.Sprintf("%d-%02d-%02d %02d:%02d",
 		current_time.Year(), int(current_time.Month()), current_time.Day(),
 		current_time.Hour(), current_time.Minute())
@@ -114,8 +106,6 @@ func newWallet(c echo.Context) error {
 		})
 	}
 
-	fmt.Println(newWallet)
-
 	newPOSTWallet := POSTWallet{
 
 		Name:         newWallet.Name,
@@ -125,16 +115,8 @@ func newWallet(c echo.Context) error {
 		StatusCode:   200,
 		Message:      "Food added successfully!",
 	}
-
 	walletRecords = append(walletRecords, *newWallet)
 
-	// 	responseMsg := fmt.Sprintf(   // use c.String
-	// 		`"{
-	// 		name: "%s"
-	// 		balance: %.1f,
-	// 		coins: [],
-	// 		Last_updated: "%s",
-	// }"`, newPOSTWallet.Name, newPOSTWallet.Balance, newPOSTWallet.Last_updated)
 	return c.JSON(http.StatusOK, newPOSTWallet)
 }
 
@@ -163,6 +145,7 @@ func updateWallet(c echo.Context) error {
 
 	initial := wname
 	walletName := strings.TrimLeft(strings.TrimRight(initial, "}"), "{")
+	// fmt.Println(walletName)
 	index := findWalletByName(walletName)
 
 	if index == -1 {
@@ -172,7 +155,19 @@ func updateWallet(c echo.Context) error {
 			Message:    "Not found.",
 		})
 	}
-	walletRecords[index].Name = walletName
+
+	reqBody, _ := ioutil.ReadAll(c.Request().Body) // read the body of POST req in to slice bytes.
+	newWallet := new(Wallet)
+	err := json.Unmarshal(reqBody, newWallet)
+
+	if err != nil {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Invalid Types.",
+		})
+	}
+	walletRecords[index].Name = newWallet.Name
 
 	return c.JSON(http.StatusOK, POSTWallet{
 		Name:         walletRecords[index].Name,
@@ -182,6 +177,37 @@ func updateWallet(c echo.Context) error {
 		StatusCode:   200,
 		Message:      "Wallet name changed successfully!",
 	})
+}
+
+func deleteWallet(c echo.Context) error {
+
+	wname := c.Param("{wname}")
+
+	initial := wname
+	walletName := strings.TrimLeft(strings.TrimRight(initial, "}"), "{")
+	// fmt.Println(walletName)
+	index := findWalletByName(walletName)
+
+	if index == -1 {
+
+		return c.JSON(http.StatusNotFound, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Not found.",
+		})
+	}
+
+	PostWalletResponse := POSTWallet{
+		Name:         walletRecords[index].Name,
+		Balance:      walletRecords[index].Balance,
+		Coins:        walletRecords[index].Coins,
+		Last_updated: walletRecords[index].Last_updated, // maybe need update.
+		StatusCode:   200,
+		Message:      "Wallet deleted (logged out) successfully!",
+	}
+
+	walletRecords = RemoveWalletRecord(index)
+
+	return c.JSON(http.StatusOK, PostWalletResponse)
 }
 
 func findWalletByName(name string) int {
@@ -194,29 +220,23 @@ func findWalletByName(name string) int {
 	return -1
 }
 
+func RemoveWalletRecord(index int) []Wallet {
+	return append(walletRecords[:index], walletRecords[index+1:]...)
+}
+
 func main() {
 
 	walletRecords = []Wallet{}
 	const PORT string = ":8080"
-	// current_time := time.Now()
-	// str := current_time.Year()
-	// fmt.Printf("%T", str)
-	// myTime := fmt.Sprintf("%d-%02d-%02d %02d:%02d\n",
-	// 	current_time.Year(), current_time.Month(), current_time.Day(),
-	// 	current_time.Hour(), current_time.Minute())
-	// // individual elements of time can
-	// // also be called to print accordingly
-
-	// fmt.Println(myTime)
 
 	e := echo.New()
+	// --------- wallet methods -----------------
 	e.POST("/wallets", newWallet)
 	e.GET("/wallets", getWallets)
 	e.PUT("/wallets/:{wname}", updateWallet)
+	e.DELETE("/wallets/:{wname}", deleteWallet)
 
-	// e.GET("/show", show)
-	// e.GET("/users/:id", getUser)
-	//e.POST("/save", save)
+	// ------- coin methods ---------------------
 
 	e.Logger.Fatal(e.Start(PORT))
 }
