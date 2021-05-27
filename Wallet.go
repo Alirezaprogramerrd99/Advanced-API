@@ -12,27 +12,18 @@ import (
 )
 
 type Coin struct {
-	Name   string
-	Symbol string
-	Amount float64
-	rate   float64
+	Name   string  `json:"name"`
+	Symbol string  `json:"symbol"`
+	Amount float64 `json:"amount"`
+	Rate   float64 `json:"rate"`
 }
 
-type Time struct {
-	Year     int
-	Month    int
-	Day      int
-	Hour     int
-	Minute   int
-	TimeInfo string
-}
+// func (myTime Time) String() string {
 
-func (myTime Time) String() string {
-
-	return fmt.Sprintf("%d-%02d-%02d %02d:%02d\n",
-		myTime.Year, myTime.Month, myTime.Day,
-		myTime.Hour, myTime.Minute)
-}
+// 	return fmt.Sprintf("%d-%02d-%02d %02d:%02d\n",
+// 		myTime.Year, myTime.Month, myTime.Day,
+// 		myTime.Hour, myTime.Minute)
+// }
 
 type Wallet struct {
 	Name         string  `json:"name"`
@@ -50,6 +41,15 @@ type POSTWallet struct {
 	Last_updated string  `json:"last_updated"`
 	StatusCode   int     `json:"code"`
 	Message      string  `json:"message"`
+}
+
+type POSTCoin struct {
+	Name       string  `json:"name"`
+	Symbol     string  `json:"symbol"`
+	Amount     float64 `json:"amount"`
+	Rate       float64 `json:"rate"`
+	StatusCode int     `json:"code"`
+	Message    string  `json:"message"`
 }
 
 type GETWalletsResponse struct {
@@ -184,8 +184,7 @@ func deleteWallet(c echo.Context) error {
 	wname := c.Param("{wname}")
 
 	initial := wname
-	walletName := strings.TrimLeft(strings.TrimRight(initial, "}"), "{")
-	// fmt.Println(walletName)
+	walletName := trimBrackets(initial)
 	index := findWalletByName(walletName)
 
 	if index == -1 {
@@ -220,8 +219,174 @@ func findWalletByName(name string) int {
 	return -1
 }
 
+func trimBrackets(str string) string {
+	return strings.TrimLeft(strings.TrimRight(str, "}"), "{")
+}
+
 func RemoveWalletRecord(index int) []Wallet {
 	return append(walletRecords[:index], walletRecords[index+1:]...)
+}
+
+// ------------------------ Coin Handlers ------------------------------------------------------
+func newCoinInWallet(c echo.Context) error { // here also we must update the balance of that wallet.
+	wname := c.Param("{wname}")
+	// symbolParam := c.Param("{symbol}")
+
+	walletName := trimBrackets(wname)
+	// symbol := trimBrackets(symbolParam)
+	index := findWalletByName(walletName)
+
+	if index == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Not found.",
+		})
+	}
+
+	reqBody, _ := ioutil.ReadAll(c.Request().Body)
+	newCoin := new(Coin)
+	err := json.Unmarshal(reqBody, newCoin)
+
+	walletRecords[index].Coins = append(walletRecords[index].Coins, *newCoin)
+
+	if err != nil {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Invalid Types.",
+		})
+	}
+
+	return c.JSON(http.StatusOK, POSTCoin{
+		Name:       newCoin.Name,
+		Symbol:     newCoin.Symbol,
+		Amount:     newCoin.Amount,
+		Rate:       newCoin.Rate,
+		StatusCode: 200,
+		Message:    "Coin added successfully!",
+	})
+}
+
+func getWalletInfo(c echo.Context) error {
+
+	wname := c.Param("{wname}")
+	walletName := trimBrackets(wname)
+	index := findWalletByName(walletName)
+
+	if index == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Not found.",
+		})
+	}
+
+	return c.JSON(http.StatusOK, POSTWallet{
+
+		Name:         walletRecords[index].Name,
+		Balance:      walletRecords[index].Balance,
+		Coins:        walletRecords[index].Coins,
+		Last_updated: walletRecords[index].Last_updated,
+		StatusCode:   200,
+		Message:      "All coins received successfully!",
+	})
+
+}
+
+func updateCoinInWallet(c echo.Context) error { // update balance
+
+	wname := c.Param("{wname}")
+	symbolParam := c.Param("{symbol}")
+
+	walletName := trimBrackets(wname)
+	symbol := trimBrackets(symbolParam)
+	index := findWalletByName(walletName)
+
+	if index == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Not found.",
+		})
+	}
+	// search for a coin in wallet.
+	indexCoinInWallet := searchForCoin(walletRecords[index], symbol)
+
+	if indexCoinInWallet == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Coin is not in this wallet!",
+		})
+	}
+
+	reqBody, _ := ioutil.ReadAll(c.Request().Body)
+	updateCoin := new(Coin)
+	err := json.Unmarshal(reqBody, updateCoin)
+
+	if err != nil {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Invalid Types.",
+		})
+	}
+
+	//------------- updating coin in wallet part
+	walletRecords[index].Coins[indexCoinInWallet].Name = updateCoin.Name
+	walletRecords[index].Coins[indexCoinInWallet].Symbol = updateCoin.Symbol
+	walletRecords[index].Coins[indexCoinInWallet].Amount = updateCoin.Amount
+	walletRecords[index].Coins[indexCoinInWallet].Rate = updateCoin.Rate
+
+	return c.JSON(http.StatusOK, POSTCoin{
+
+		Name:       updateCoin.Name,
+		Symbol:     updateCoin.Symbol,
+		Amount:     updateCoin.Amount,
+		Rate:       updateCoin.Rate,
+		StatusCode: 200,
+		Message:    "Coin updated successfully!",
+	})
+}
+
+func deleteCoinFromWallet(c echo.Context) error {
+
+	wname := c.Param("{wname}")
+	symbolParam := c.Param("{symbol}")
+
+	walletName := trimBrackets(wname)
+	symbol := trimBrackets(symbolParam)
+	index := findWalletByName(walletName)
+
+	if index == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Not found.",
+		})
+	}
+	// search for a coin in wallet.
+	indexCoinInWallet := searchForCoin(walletRecords[index], symbol)
+
+	if indexCoinInWallet == -1 {
+
+		return c.JSON(404, ErrorResponse{
+			StatusCode: 404,
+			Message:    "Coin is not in this wallet!",
+		})
+	}
+
+}
+
+func searchForCoin(wallet Wallet, symbol string) int {
+
+	for i := 0; i < len(wallet.Coins); i++ {
+		if wallet.Coins[i].Symbol == symbol {
+			return i
+		}
+	}
+	return -1
 }
 
 func main() {
@@ -237,6 +402,12 @@ func main() {
 	e.DELETE("/wallets/:{wname}", deleteWallet)
 
 	// ------- coin methods ---------------------
+
+	//e.POST("/:{wname}/:{symbol}", newCoinInWallet)
+	e.POST("/:{wname}/coins", newCoinInWallet)
+	e.GET("/:{wname}", getWalletInfo)
+	e.PUT("/:{wname}/:{symbol}", updateCoinInWallet)
+	e.DELETE("/:{wname}/:{symbol}", deleteCoinFromWallet)
 
 	e.Logger.Fatal(e.Start(PORT))
 }
