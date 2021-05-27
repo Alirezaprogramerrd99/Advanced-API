@@ -75,8 +75,17 @@ func newWallet(c echo.Context) error {
 	}
 
 	reqBody, _ := ioutil.ReadAll(c.Request().Body) // read the body of POST req in to slice bytes.
-	//strReqBody := string(reqBody)
-	//splitBody := strings.Split(strReqBody, ",")   // maybe needed for error handeling.
+	strReqBody := string(reqBody)
+	splitBody := strings.Split(strReqBody, ",") // maybe needed for error handeling.
+
+	if len(splitBody) > 1 {
+
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+			StatusCode: 406,
+			Message:    "Request not acceptable.",
+		})
+	}
+
 	newWallet := new(Wallet)
 	current_time := time.Now()
 	err := json.Unmarshal(reqBody, newWallet)
@@ -248,8 +257,6 @@ func newCoinInWallet(c echo.Context) error { // here also we must update the bal
 	newCoin := new(Coin)
 	err := json.Unmarshal(reqBody, newCoin)
 
-	walletRecords[index].Coins = append(walletRecords[index].Coins, *newCoin)
-
 	if err != nil {
 
 		return c.JSON(404, ErrorResponse{
@@ -257,6 +264,9 @@ func newCoinInWallet(c echo.Context) error { // here also we must update the bal
 			Message:    "Invalid Types.",
 		})
 	}
+
+	walletRecords[index].Coins = append(walletRecords[index].Coins, *newCoin)
+	updateBalance(&(walletRecords[index]))
 
 	return c.JSON(http.StatusOK, POSTCoin{
 		Name:       newCoin.Name,
@@ -332,12 +342,13 @@ func updateCoinInWallet(c echo.Context) error { // update balance
 			Message:    "Invalid Types.",
 		})
 	}
-
 	//------------- updating coin in wallet part
 	walletRecords[index].Coins[indexCoinInWallet].Name = updateCoin.Name
 	walletRecords[index].Coins[indexCoinInWallet].Symbol = updateCoin.Symbol
 	walletRecords[index].Coins[indexCoinInWallet].Amount = updateCoin.Amount
 	walletRecords[index].Coins[indexCoinInWallet].Rate = updateCoin.Rate
+
+	updateBalance(&(walletRecords[index]))
 
 	return c.JSON(http.StatusOK, POSTCoin{
 
@@ -377,6 +388,19 @@ func deleteCoinFromWallet(c echo.Context) error {
 		})
 	}
 
+	PostCoinResponse := POSTCoin{
+		Name:       walletRecords[index].Coins[indexCoinInWallet].Name,
+		Symbol:     walletRecords[index].Coins[indexCoinInWallet].Symbol,
+		Amount:     walletRecords[index].Coins[indexCoinInWallet].Amount,
+		Rate:       walletRecords[index].Coins[indexCoinInWallet].Rate,
+		StatusCode: 200,
+		Message:    "Coin deleted successfully!",
+	}
+
+	walletRecords[index].Coins = removeCoinFromWallet(walletRecords[index], indexCoinInWallet)
+	updateBalance(&(walletRecords[index]))
+
+	return c.JSON(http.StatusOK, PostCoinResponse)
 }
 
 func searchForCoin(wallet Wallet, symbol string) int {
@@ -387,6 +411,23 @@ func searchForCoin(wallet Wallet, symbol string) int {
 		}
 	}
 	return -1
+}
+
+func removeCoinFromWallet(wallet Wallet, index int) []Coin {
+	return append(wallet.Coins[:index], wallet.Coins[index+1:]...)
+}
+
+func updateBalance(wallet *Wallet) {
+
+	var product float64
+	var sumAll float64 = 0.0
+
+	for i := 0; i < len(wallet.Coins); i++ {
+
+		product = wallet.Coins[i].Rate * wallet.Coins[i].Amount
+		sumAll += product
+	}
+	wallet.Balance = sumAll
 }
 
 func main() {
@@ -402,8 +443,6 @@ func main() {
 	e.DELETE("/wallets/:{wname}", deleteWallet)
 
 	// ------- coin methods ---------------------
-
-	//e.POST("/:{wname}/:{symbol}", newCoinInWallet)
 	e.POST("/:{wname}/coins", newCoinInWallet)
 	e.GET("/:{wname}", getWalletInfo)
 	e.PUT("/:{wname}/:{symbol}", updateCoinInWallet)
