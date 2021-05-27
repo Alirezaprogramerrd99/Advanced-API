@@ -165,7 +165,18 @@ func updateWallet(c echo.Context) error {
 		})
 	}
 
-	reqBody, _ := ioutil.ReadAll(c.Request().Body) // read the body of POST req in to slice bytes.
+	reqBody, _ := ioutil.ReadAll(c.Request().Body) 
+
+	strReqBody := string(reqBody)
+	splitBody := strings.Split(strReqBody, ",") // maybe needed for error handeling.
+
+	if len(splitBody) > 1 {
+
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+			StatusCode: 406,
+			Message:    "Request not acceptable.",
+		})
+	
 	newWallet := new(Wallet)
 	err := json.Unmarshal(reqBody, newWallet)
 
@@ -254,6 +265,14 @@ func newCoinInWallet(c echo.Context) error { // here also we must update the bal
 	}
 
 	reqBody, _ := ioutil.ReadAll(c.Request().Body)
+
+	if len(splitBody) > 1 {
+
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+			StatusCode: 406,
+			Message:    "Request not acceptable.",
+		})
+
 	newCoin := new(Coin)
 	err := json.Unmarshal(reqBody, newCoin)
 
@@ -332,6 +351,14 @@ func updateCoinInWallet(c echo.Context) error { // update balance
 	}
 
 	reqBody, _ := ioutil.ReadAll(c.Request().Body)
+
+	if len(splitBody) > 1 {
+
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+			StatusCode: 406,
+			Message:    "Request not acceptable.",
+		})
+		
 	updateCoin := new(Coin)
 	err := json.Unmarshal(reqBody, updateCoin)
 
