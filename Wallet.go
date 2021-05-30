@@ -1,5 +1,6 @@
 package main
 
+//----------------------- Alireza Rashidi 96243097 -----------------------
 import (
 	"encoding/json"
 	"fmt"
@@ -17,13 +18,6 @@ type Coin struct {
 	Amount float64 `json:"amount"`
 	Rate   float64 `json:"rate"`
 }
-
-// func (myTime Time) String() string {
-
-// 	return fmt.Sprintf("%d-%02d-%02d %02d:%02d\n",
-// 		myTime.Year, myTime.Month, myTime.Day,
-// 		myTime.Hour, myTime.Minute)
-// }
 
 type Wallet struct {
 	Name         string  `json:"name"`
@@ -64,6 +58,7 @@ type ErrorResponse struct {
 	Message    string `json:"message"`
 }
 
+// ------------------------ Wallet Handlers ------------------------------------------------------
 func newWallet(c echo.Context) error {
 
 	if c.Request().Method != "POST" {
@@ -80,17 +75,13 @@ func newWallet(c echo.Context) error {
 
 	if len(splitBody) > 1 {
 
-		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+		return c.JSON(http.StatusNotAcceptable, ErrorResponse{
 			StatusCode: 406,
 			Message:    "Request not acceptable.",
 		})
 	}
-
 	newWallet := new(Wallet)
-	current_time := time.Now()
 	err := json.Unmarshal(reqBody, newWallet)
-
-	// must check if the newPOSTWallet.name was in the public list.
 
 	if findWalletByName(newWallet.Name) > -1 {
 
@@ -100,10 +91,7 @@ func newWallet(c echo.Context) error {
 		})
 	}
 
-	(*newWallet).Last_updated = fmt.Sprintf("%d-%02d-%02d %02d:%02d",
-		current_time.Year(), int(current_time.Month()), current_time.Day(),
-		current_time.Hour(), current_time.Minute())
-
+	(*newWallet).Last_updated = updateDate()
 	(*newWallet).Balance = 0.0
 	(*newWallet).Coins = make([]Coin, 0)
 
@@ -122,7 +110,7 @@ func newWallet(c echo.Context) error {
 		Coins:        newWallet.Coins,
 		Last_updated: newWallet.Last_updated,
 		StatusCode:   200,
-		Message:      "Food added successfully!",
+		Message:      "Wallet added successfully!",
 	}
 	walletRecords = append(walletRecords, *newWallet)
 
@@ -157,7 +145,7 @@ func updateWallet(c echo.Context) error {
 	// fmt.Println(walletName)
 	index := findWalletByName(walletName)
 
-	if index == -1 {
+	if index == -1 { // for check is that wallet is in the walletRecords or not.
 
 		return c.JSON(http.StatusNotFound, ErrorResponse{
 			StatusCode: 404,
@@ -165,7 +153,7 @@ func updateWallet(c echo.Context) error {
 		})
 	}
 
-	reqBody, _ := ioutil.ReadAll(c.Request().Body) 
+	reqBody, _ := ioutil.ReadAll(c.Request().Body)
 
 	strReqBody := string(reqBody)
 	splitBody := strings.Split(strReqBody, ",") // maybe needed for error handeling.
@@ -176,7 +164,8 @@ func updateWallet(c echo.Context) error {
 			StatusCode: 406,
 			Message:    "Request not acceptable.",
 		})
-	
+	}
+
 	newWallet := new(Wallet)
 	err := json.Unmarshal(reqBody, newWallet)
 
@@ -187,7 +176,18 @@ func updateWallet(c echo.Context) error {
 			Message:    "Invalid Types.",
 		})
 	}
+
+	if findWalletByName(newWallet.Name) > -1 { // for duplicate in walletRecords from request body.
+
+		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
+			StatusCode: 406,
+			Message:    "New wallet name is duplicate!",
+		})
+	}
+
+	//------------------ updating the wallet------------------------
 	walletRecords[index].Name = newWallet.Name
+	walletRecords[index].Last_updated = updateDate()
 
 	return c.JSON(http.StatusOK, POSTWallet{
 		Name:         walletRecords[index].Name,
@@ -265,13 +265,16 @@ func newCoinInWallet(c echo.Context) error { // here also we must update the bal
 	}
 
 	reqBody, _ := ioutil.ReadAll(c.Request().Body)
+	strReqBody := string(reqBody)
+	splitBody := strings.Split(strReqBody, ",") // maybe needed for error handeling.
 
-	if len(splitBody) > 1 {
+	if len(splitBody) > 4 {
 
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
 			StatusCode: 406,
 			Message:    "Request not acceptable.",
 		})
+	}
 
 	newCoin := new(Coin)
 	err := json.Unmarshal(reqBody, newCoin)
@@ -284,8 +287,17 @@ func newCoinInWallet(c echo.Context) error { // here also we must update the bal
 		})
 	}
 
+	if isSameInWallet(-1, walletRecords[index], newCoin.Name, newCoin.Symbol) {
+
+		return c.JSON(406, ErrorResponse{
+			StatusCode: 406,
+			Message:    "duplicate coin in wallet!",
+		})
+	}
 	walletRecords[index].Coins = append(walletRecords[index].Coins, *newCoin)
 	updateBalance(&(walletRecords[index]))
+
+	walletRecords[index].Last_updated = updateDate()
 
 	return c.JSON(http.StatusOK, POSTCoin{
 		Name:       newCoin.Name,
@@ -352,13 +364,17 @@ func updateCoinInWallet(c echo.Context) error { // update balance
 
 	reqBody, _ := ioutil.ReadAll(c.Request().Body)
 
-	if len(splitBody) > 1 {
+	strReqBody := string(reqBody)
+	splitBody := strings.Split(strReqBody, ",") // maybe needed for error handeling.
+
+	if len(splitBody) > 4 {
 
 		return c.JSON(http.StatusMethodNotAllowed, ErrorResponse{
 			StatusCode: 406,
 			Message:    "Request not acceptable.",
 		})
-		
+	}
+
 	updateCoin := new(Coin)
 	err := json.Unmarshal(reqBody, updateCoin)
 
@@ -369,6 +385,14 @@ func updateCoinInWallet(c echo.Context) error { // update balance
 			Message:    "Invalid Types.",
 		})
 	}
+
+	if isSameInWallet(indexCoinInWallet, walletRecords[index], updateCoin.Name, updateCoin.Symbol) {
+
+		return c.JSON(406, ErrorResponse{
+			StatusCode: 406,
+			Message:    "duplicate coin in wallet!",
+		})
+	}
 	//------------- updating coin in wallet part
 	walletRecords[index].Coins[indexCoinInWallet].Name = updateCoin.Name
 	walletRecords[index].Coins[indexCoinInWallet].Symbol = updateCoin.Symbol
@@ -376,6 +400,8 @@ func updateCoinInWallet(c echo.Context) error { // update balance
 	walletRecords[index].Coins[indexCoinInWallet].Rate = updateCoin.Rate
 
 	updateBalance(&(walletRecords[index]))
+
+	walletRecords[index].Last_updated = updateDate()
 
 	return c.JSON(http.StatusOK, POSTCoin{
 
@@ -426,6 +452,7 @@ func deleteCoinFromWallet(c echo.Context) error {
 
 	walletRecords[index].Coins = removeCoinFromWallet(walletRecords[index], indexCoinInWallet)
 	updateBalance(&(walletRecords[index]))
+	walletRecords[index].Last_updated = updateDate()
 
 	return c.JSON(http.StatusOK, PostCoinResponse)
 }
@@ -455,6 +482,29 @@ func updateBalance(wallet *Wallet) {
 		sumAll += product
 	}
 	wallet.Balance = sumAll
+}
+
+func isSameInWallet(invalidIndex int, wallet Wallet, name string, symbol string) bool {
+
+	for i := 0; i < len(wallet.Coins); i++ {
+
+		if i == invalidIndex {
+			continue
+		}
+
+		if wallet.Coins[i].Name == name || wallet.Coins[i].Symbol == symbol {
+			return true
+		}
+	}
+	return false
+}
+
+func updateDate() string {
+	current_time := time.Now()
+
+	return fmt.Sprintf("%d-%02d-%02d %02d:%02d",
+		current_time.Year(), int(current_time.Month()), current_time.Day(),
+		current_time.Hour(), current_time.Minute())
 }
 
 func main() {
