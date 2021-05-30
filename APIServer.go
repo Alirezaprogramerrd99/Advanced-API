@@ -1,6 +1,5 @@
 package main
 
-//----------------------- Alireza Rashidi 96243097 -----------------------
 import (
 	"encoding/json"
 	"fmt"
